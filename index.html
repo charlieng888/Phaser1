@@ -1,0 +1,839 @@
+<!DOCTYPE html>
+    <html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Polyblast Arena</title>
+        <style>
+            /* Reset CSS: Please avoid making changes here unless you know what you're doing :) */
+            *,
+            *::before,
+            *::after {
+                margin: 0;
+                padding: 0;
+                box-sizing: border-box;
+            }
+    
+            html, body {
+                width: 100%;
+                height: 100%;
+            }
+    
+            body {
+                line-height: 1;
+                font-family: Arial, sans-serif;
+                background:
+                    radial-gradient(circle at 50% 20%, rgba(92, 215, 255, 0.16), transparent 32rem),
+                    #080b17;
+                overflow: hidden;
+            }
+
+            #game-container {
+                position: relative;
+                width: 100vw;
+                height: 100vh;
+                touch-action: none;
+                user-select: none;
+            }
+
+            #touch-controls {
+                position: fixed;
+                inset: 0;
+                z-index: 9;
+                pointer-events: none;
+                display: none;
+            }
+
+            body.menu-open #touch-controls,
+            body.shop-open #touch-controls {
+                display: none;
+            }
+
+            body.touch-enabled #touch-controls {
+                display: block;
+            }
+
+            body.controls-enabled #touch-controls {
+                display: block;
+            }
+
+            #controls-toggle {
+                position: fixed;
+                left: 118px;
+                top: 18px;
+                z-index: 8;
+                min-height: 42px;
+                padding: 0 14px;
+                border: 1px solid rgba(124, 247, 255, 0.55);
+                background: rgba(32, 47, 76, 0.9);
+                color: #f7fbff;
+                cursor: pointer;
+                font: 900 13px/1 Arial, sans-serif;
+            }
+
+            #controls-toggle[hidden] {
+                display: none;
+            }
+
+            .touch-pad {
+                position: absolute;
+                bottom: 34px;
+                width: 148px;
+                height: 148px;
+                border: 2px solid rgba(124, 247, 255, 0.34);
+                border-radius: 50%;
+                background: rgba(7, 9, 20, 0.34);
+                pointer-events: auto;
+                touch-action: none;
+            }
+
+            #move-pad {
+                left: 34px;
+            }
+
+            #fire-pad {
+                right: 34px;
+                border-color: rgba(255, 210, 90, 0.42);
+            }
+
+            .touch-stick {
+                position: absolute;
+                left: 50%;
+                top: 50%;
+                width: 58px;
+                height: 58px;
+                border-radius: 50%;
+                transform: translate(-50%, -50%);
+                background: rgba(124, 247, 255, 0.62);
+                box-shadow: 0 0 24px rgba(124, 247, 255, 0.24);
+            }
+
+            #fire-pad .touch-stick {
+                background: rgba(255, 210, 90, 0.68);
+                box-shadow: 0 0 24px rgba(255, 210, 90, 0.24);
+            }
+
+            .touch-label {
+                position: absolute;
+                left: 0;
+                right: 0;
+                top: -26px;
+                color: #d7defd;
+                text-align: center;
+                font: 900 12px/1 Arial, sans-serif;
+                text-shadow: 0 2px 8px #070914;
+            }
+
+            #touch-fire-button {
+                position: absolute;
+                right: 62px;
+                bottom: 198px;
+                width: 94px;
+                height: 48px;
+                border: 1px solid rgba(255, 210, 90, 0.6);
+                background: rgba(255, 210, 90, 0.18);
+                color: #fff0ca;
+                font: 900 13px/1 Arial, sans-serif;
+                pointer-events: auto;
+                touch-action: none;
+            }
+
+            #touch-heal-button {
+                position: absolute;
+                right: 168px;
+                bottom: 198px;
+                width: 94px;
+                height: 48px;
+                border: 1px solid rgba(116, 255, 179, 0.6);
+                background: rgba(116, 255, 179, 0.16);
+                color: #e9fff0;
+                font: 900 13px/1 Arial, sans-serif;
+                pointer-events: auto;
+                touch-action: none;
+            }
+
+            #touch-heal-button:disabled {
+                opacity: 0.42;
+            }
+
+            #touch-home-button {
+                position: absolute;
+                left: 22px;
+                top: 22px;
+                min-width: 84px;
+                min-height: 42px;
+                border: 1px solid rgba(124, 247, 255, 0.55);
+                background: rgba(7, 9, 20, 0.58);
+                color: #f7fbff;
+                font: 900 13px/1 Arial, sans-serif;
+                pointer-events: auto;
+                touch-action: none;
+            }
+
+            #menu-overlay {
+                position: fixed;
+                inset: 0;
+                z-index: 10;
+                display: grid;
+                place-items: center;
+                padding: 24px;
+                color: #f7fbff;
+                background:
+                    linear-gradient(180deg, rgba(8, 11, 23, 0.24), rgba(8, 11, 23, 0.74)),
+                    radial-gradient(circle at 50% 50%, rgba(124, 247, 255, 0.18), transparent 30rem);
+            }
+
+            #menu-overlay[hidden] {
+                display: none;
+            }
+
+            .menu-card {
+                width: min(520px, calc(100vw - 32px));
+                max-height: calc(100vh - 32px);
+                overflow-y: auto;
+                border: 1px solid rgba(124, 247, 255, 0.42);
+                background: rgba(16, 22, 42, 0.94);
+                box-shadow: 0 24px 80px rgba(0, 0, 0, 0.42);
+                padding: 28px;
+            }
+
+            .menu-card h1 {
+                margin-bottom: 8px;
+                font-size: 38px;
+                line-height: 1;
+                letter-spacing: 0;
+            }
+
+            .menu-card p {
+                margin-bottom: 22px;
+                color: #b8c7ff;
+                font-size: 15px;
+                line-height: 1.45;
+            }
+
+            .menu-status {
+                display: inline-grid;
+                place-items: center;
+                min-height: 30px;
+                margin-bottom: 18px;
+                padding: 0 12px;
+                border: 1px solid rgba(255, 210, 90, 0.42);
+                background: rgba(255, 210, 90, 0.08);
+                color: #ffd25a;
+                font: 900 13px/1 Arial, sans-serif;
+            }
+
+            .menu-field {
+                display: grid;
+                gap: 8px;
+                margin-bottom: 14px;
+                color: #d7defd;
+                font-size: 13px;
+                font-weight: 700;
+            }
+
+            .menu-field input {
+                width: 100%;
+                border: 1px solid rgba(124, 247, 255, 0.28);
+                background: rgba(7, 9, 20, 0.72);
+                color: #ffffff;
+                padding: 13px 14px;
+                font: 700 16px/1 Arial, sans-serif;
+                outline: none;
+            }
+
+            .menu-field input:focus {
+                border-color: rgba(124, 247, 255, 0.9);
+                box-shadow: 0 0 0 3px rgba(124, 247, 255, 0.12);
+            }
+
+            .menu-actions {
+                display: grid;
+                grid-template-columns: 1fr 1fr;
+                gap: 12px;
+                margin-top: 18px;
+            }
+
+            .menu-button.wide {
+                grid-column: 1 / -1;
+            }
+
+            .multiplayer-status {
+                min-height: 16px;
+                margin-top: 10px;
+                color: #7cf7ff;
+                font-size: 12px;
+                line-height: 1.3;
+            }
+
+            .room-panel,
+            .map-panel,
+            .daily-panel {
+                display: grid;
+                gap: 8px;
+                margin-top: 14px;
+                padding: 12px;
+                border: 1px solid rgba(124, 247, 255, 0.18);
+                background: rgba(7, 9, 20, 0.36);
+            }
+
+            .room-row,
+            .map-options {
+                display: grid;
+                grid-template-columns: 1fr 1fr;
+                gap: 8px;
+            }
+
+            .room-panel input {
+                width: 100%;
+                min-height: 36px;
+                border: 1px solid rgba(124, 247, 255, 0.28);
+                background: rgba(7, 9, 20, 0.72);
+                color: #ffffff;
+                padding: 0 10px;
+                font: 900 14px/1 Arial, sans-serif;
+                text-transform: uppercase;
+            }
+
+            .mini-button,
+            .map-option {
+                min-height: 36px;
+                border: 1px solid rgba(124, 247, 255, 0.32);
+                background: rgba(32, 47, 76, 0.9);
+                color: #f7fbff;
+                cursor: pointer;
+                font: 900 12px/1 Arial, sans-serif;
+            }
+
+            .map-option.is-selected {
+                background: #7cf7ff;
+                color: #07101d;
+                border-color: #7cf7ff;
+            }
+
+            .daily-panel h3,
+            .map-panel h3,
+            .room-panel h3 {
+                color: #ffd25a;
+                font-size: 12px;
+                line-height: 1;
+            }
+
+            .daily-list {
+                display: grid;
+                gap: 6px;
+                color: #d7defd;
+                font-size: 12px;
+                line-height: 1.25;
+            }
+
+            .account-panel {
+                display: grid;
+                gap: 10px;
+                margin: 16px 0;
+                padding: 12px;
+                border: 1px solid rgba(124, 247, 255, 0.2);
+                background: rgba(7, 9, 20, 0.42);
+            }
+
+            .account-row {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                gap: 12px;
+            }
+
+            .account-copy {
+                display: grid;
+                gap: 6px;
+            }
+
+            .account-badge {
+                display: inline-grid;
+                place-items: center;
+                width: fit-content;
+                min-height: 22px;
+                padding: 0 8px;
+                border: 1px solid rgba(255, 210, 90, 0.36);
+                background: rgba(255, 210, 90, 0.1);
+                color: #ffd25a;
+                font: 900 11px/1 Arial, sans-serif;
+            }
+
+            .account-badge.is-signed-in {
+                border-color: rgba(116, 255, 179, 0.5);
+                background: rgba(116, 255, 179, 0.12);
+                color: #74ffb3;
+            }
+
+            .account-status {
+                color: #b8c7ff;
+                font-size: 12px;
+                line-height: 1.35;
+            }
+
+            .account-actions {
+                display: flex;
+                gap: 8px;
+            }
+
+            .account-button {
+                min-height: 32px;
+                border: 1px solid rgba(124, 247, 255, 0.34);
+                background: rgba(32, 47, 76, 0.9);
+                color: #f7fbff;
+                cursor: pointer;
+                padding: 0 10px;
+                font: 900 12px/1 Arial, sans-serif;
+            }
+
+            .account-button[hidden] {
+                display: none;
+            }
+
+            .account-button:disabled {
+                opacity: 0.48;
+                cursor: not-allowed;
+            }
+
+            .leaderboard {
+                border-top: 1px solid rgba(124, 247, 255, 0.14);
+                padding-top: 10px;
+            }
+
+            .leaderboard-title {
+                margin-bottom: 8px;
+                color: #ffd25a;
+                font: 900 12px/1 Arial, sans-serif;
+            }
+
+            .leaderboard-list {
+                display: grid;
+                gap: 6px;
+            }
+
+            .leaderboard-list li {
+                display: grid;
+                grid-template-columns: 24px 1fr auto;
+                gap: 8px;
+                color: #d7defd;
+                font-size: 12px;
+                line-height: 1.2;
+            }
+
+            .menu-button {
+                border: 1px solid rgba(124, 247, 255, 0.45);
+                background: rgba(32, 47, 76, 0.9);
+                color: #f7fbff;
+                min-height: 46px;
+                padding: 0 14px;
+                cursor: pointer;
+                font: 800 14px/1 Arial, sans-serif;
+            }
+
+            .menu-button.primary {
+                background: #7cf7ff;
+                color: #07101d;
+                border-color: #7cf7ff;
+            }
+
+            #arms-room-button {
+                position: fixed;
+                right: 18px;
+                top: 18px;
+                z-index: 8;
+                min-height: 42px;
+                padding: 0 16px;
+                border: 1px solid rgba(255, 210, 90, 0.7);
+                background: rgba(32, 47, 76, 0.9);
+                color: #fff0ca;
+                cursor: pointer;
+                font: 900 13px/1 Arial, sans-serif;
+            }
+
+            #arms-room-button[hidden] {
+                display: none;
+            }
+
+            #shop-panel {
+                position: fixed;
+                right: 18px;
+                top: 72px;
+                z-index: 12;
+                width: min(360px, calc(100vw - 36px));
+                max-height: calc(100vh - 96px);
+                overflow-y: auto;
+                border: 1px solid rgba(255, 210, 90, 0.72);
+                background: rgba(16, 22, 42, 0.96);
+                color: #f7fbff;
+                padding: 16px;
+                box-shadow: 0 18px 54px rgba(0, 0, 0, 0.42);
+            }
+
+            #shop-panel[hidden] {
+                display: none;
+            }
+
+            .shop-head {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                gap: 14px;
+                margin-bottom: 12px;
+            }
+
+            .shop-head h2 {
+                font-size: 22px;
+                line-height: 1;
+            }
+
+            .shop-coins {
+                color: #ffd25a;
+                font: 900 14px/1 Arial, sans-serif;
+            }
+
+            .shop-tabs {
+                display: grid;
+                grid-template-columns: repeat(3, 1fr);
+                gap: 8px;
+                margin-bottom: 12px;
+            }
+
+            .shop-tab {
+                min-height: 34px;
+                border: 1px solid rgba(124, 247, 255, 0.28);
+                background: rgba(7, 9, 20, 0.48);
+                color: #b8c7ff;
+                cursor: pointer;
+                font: 900 12px/1 Arial, sans-serif;
+            }
+
+            .shop-tab.is-active {
+                background: #7cf7ff;
+                border-color: #7cf7ff;
+                color: #07101d;
+            }
+
+            .shop-items {
+                display: grid;
+                gap: 8px;
+            }
+
+            .shop-item[hidden] {
+                display: none;
+            }
+
+            .shop-item {
+                display: grid;
+                grid-template-columns: 1fr auto;
+                align-items: center;
+                gap: 10px;
+                border: 1px solid rgba(124, 247, 255, 0.18);
+                background: rgba(7, 9, 20, 0.48);
+                padding: 10px;
+            }
+
+            .shop-item strong {
+                display: block;
+                margin-bottom: 4px;
+                font-size: 13px;
+            }
+
+            .shop-item span {
+                color: #b8c7ff;
+                font-size: 12px;
+                line-height: 1.3;
+            }
+
+            .shop-buy {
+                min-width: 74px;
+                min-height: 34px;
+                border: 1px solid rgba(124, 247, 255, 0.36);
+                background: rgba(32, 47, 76, 0.9);
+                color: #f7fbff;
+                cursor: pointer;
+                font: 900 12px/1 Arial, sans-serif;
+            }
+
+            .shop-buy.is-equipped {
+                background: #7cf7ff;
+                color: #07101d;
+                border-color: #7cf7ff;
+            }
+
+            .rarity-common strong {
+                color: #f7fbff;
+            }
+
+            .rarity-rare strong {
+                color: #72a7ff;
+            }
+
+            .rarity-epic strong {
+                color: #ff8de3;
+            }
+
+            .rarity-legendary strong {
+                color: #ffd25a;
+            }
+
+            .shop-buy:disabled {
+                opacity: 0.42;
+                cursor: not-allowed;
+            }
+
+            .avatar-panel {
+                margin-top: 16px;
+                padding: 14px;
+                border: 1px solid rgba(124, 247, 255, 0.24);
+                background: rgba(7, 9, 20, 0.52);
+            }
+
+            .avatar-panel[hidden] {
+                display: none;
+            }
+
+            .avatar-swatches {
+                display: grid;
+                grid-template-columns: repeat(4, 1fr);
+                gap: 10px;
+            }
+
+            .skin-options {
+                display: grid;
+                grid-template-columns: repeat(5, 1fr);
+                gap: 8px;
+                margin-bottom: 14px;
+            }
+
+            .skin-option {
+                display: grid;
+                gap: 4px;
+                place-items: center;
+                border: 1px solid rgba(124, 247, 255, 0.28);
+                background: rgba(32, 47, 76, 0.9);
+                color: #f7fbff;
+                min-height: 76px;
+                padding: 6px 4px;
+                cursor: pointer;
+                font: 800 12px/1 Arial, sans-serif;
+            }
+
+            .skin-option.is-selected {
+                background: #7cf7ff;
+                border-color: #7cf7ff;
+                color: #07101d;
+            }
+
+            .skin-thumb {
+                width: 42px;
+                height: 42px;
+                background-image: url("./assets/player-skins.png");
+                background-size: 400% 500%;
+                background-repeat: no-repeat;
+            }
+
+            .avatar-swatch {
+                height: 42px;
+                border: 2px solid rgba(255, 255, 255, 0.22);
+                cursor: pointer;
+            }
+
+            .avatar-swatch.is-selected {
+                border-color: #ffffff;
+                box-shadow: 0 0 0 3px rgba(124, 247, 255, 0.22);
+            }
+    
+            ol, ul {
+                list-style: none;
+            }
+    
+            img, video {
+                max-width: 100%;
+                height: auto;
+                display: block;
+            }
+    
+            a {
+                text-decoration: none;
+                color: inherit;
+            }
+        </style>
+    </head>
+    <body>
+        <div id="game-container"></div>
+        <div id="touch-controls" aria-hidden="true">
+            <div id="move-pad" class="touch-pad">
+                <div class="touch-label">MOVE</div>
+                <div id="move-stick" class="touch-stick"></div>
+            </div>
+            <div id="fire-pad" class="touch-pad">
+                <div class="touch-label">AIM</div>
+                <div id="fire-stick" class="touch-stick"></div>
+            </div>
+            <button id="touch-fire-button" type="button">FIRE</button>
+            <button id="touch-heal-button" type="button">HEAL 7</button>
+            <button id="touch-home-button" type="button">HOME</button>
+        </div>
+        <button id="controls-toggle" type="button" hidden>CONTROLS</button>
+        <div id="menu-overlay">
+            <section class="menu-card" aria-label="Startup menu">
+                <h1>Polyblast Arena</h1>
+                <p>Set up your operator before entering the arena.</p>
+                <div id="menu-coins" class="menu-status">Coins 0</div>
+                <label class="menu-field">
+                    User name
+                    <input id="player-name" type="text" maxlength="18" value="Player" autocomplete="off">
+                </label>
+                <label class="menu-field">
+                    Class
+                    <input id="player-class" type="text" maxlength="18" value="Vanguard" autocomplete="off">
+                </label>
+                <div class="room-panel" aria-label="Room code">
+                    <h3>Room Code</h3>
+                    <div class="room-row">
+                        <input id="room-code" type="text" maxlength="6" value="PUBLIC" autocomplete="off" aria-label="Room code">
+                        <button id="random-room" class="mini-button" type="button">New Code</button>
+                    </div>
+                </div>
+                <div class="map-panel" aria-label="Map select">
+                    <h3>Map</h3>
+                    <div class="map-options">
+                        <button class="map-option is-selected" type="button" data-map="neon">Neon Lab</button>
+                        <button class="map-option" type="button" data-map="scrapyard">Scrapyard</button>
+                        <button class="map-option" type="button" data-map="icebase">Ice Base</button>
+                    </div>
+                </div>
+                <div class="account-panel" aria-label="Account and leaderboard">
+                    <div class="account-row">
+                        <div class="account-copy">
+                            <div id="account-badge" class="account-badge">SIGNED OUT</div>
+                            <div id="account-status" class="account-status">Google login needs Firebase setup.</div>
+                        </div>
+                        <div class="account-actions">
+                            <button id="google-login" class="account-button" type="button">Google Login</button>
+                            <button id="google-logout" class="account-button" type="button" hidden>Sign Out</button>
+                        </div>
+                    </div>
+                    <div class="leaderboard">
+                        <div class="leaderboard-title">Leaderboard</div>
+                        <ol id="leaderboard-list" class="leaderboard-list">
+                            <li><span>-</span><span>No scores yet</span><span>0</span></li>
+                        </ol>
+                    </div>
+                </div>
+                <div id="avatar-panel" class="avatar-panel" hidden>
+                    <div class="skin-options" aria-label="Sprite skin">
+                        <button class="skin-option is-selected" type="button" data-skin="0">
+                            <span class="skin-thumb" style="background-position: 0% 0%"></span>
+                            Assault
+                        </button>
+                        <button class="skin-option" type="button" data-skin="1">
+                            <span class="skin-thumb" style="background-position: 0% 25%"></span>
+                            Scout
+                        </button>
+                        <button class="skin-option" type="button" data-skin="2">
+                            <span class="skin-thumb" style="background-position: 0% 50%"></span>
+                            Medic
+                        </button>
+                        <button class="skin-option" type="button" data-skin="3">
+                            <span class="skin-thumb" style="background-position: 0% 75%"></span>
+                            Tech
+                        </button>
+                        <button class="skin-option" type="button" data-skin="4">
+                            <span class="skin-thumb" style="background-position: 0% 100%"></span>
+                            Heavy
+                        </button>
+                    </div>
+                    <div class="avatar-swatches" aria-label="Avatar color">
+                        <button class="avatar-swatch is-selected" type="button" data-tint="default" style="background:#18b8c0" aria-label="Default teal avatar"></button>
+                        <button class="avatar-swatch" type="button" data-tint="0x72a7ff" style="background:#72a7ff" aria-label="Blue avatar"></button>
+                        <button class="avatar-swatch" type="button" data-tint="0x74ffb3" style="background:#74ffb3" aria-label="Green avatar"></button>
+                        <button class="avatar-swatch" type="button" data-tint="0xff8de3" style="background:#ff8de3" aria-label="Pink avatar"></button>
+                    </div>
+                </div>
+                <div class="menu-actions">
+                    <button id="start-game" class="menu-button primary" type="button">Start Game</button>
+                    <button id="start-multiplayer" class="menu-button primary" type="button">Multiplayer</button>
+                    <button id="customize-avatar" class="menu-button" type="button">Customize Avatar</button>
+                    <button id="menu-arms-room" class="menu-button" type="button">ARMS ROOM</button>
+                </div>
+                <div id="multiplayer-status" class="multiplayer-status">Multiplayer ready.</div>
+                <div class="daily-panel" aria-label="Daily challenges">
+                    <h3>Daily Challenges</h3>
+                    <ul id="daily-list" class="daily-list">
+                        <li>Loading challenges...</li>
+                    </ul>
+                </div>
+            </section>
+        </div>
+        <button id="arms-room-button" type="button" hidden>ARMS ROOM</button>
+        <aside id="shop-panel" aria-label="Arms Room" hidden>
+            <div class="shop-head">
+                <h2>ARMS ROOM</h2>
+                <div id="shop-coins" class="shop-coins">Coins 0</div>
+            </div>
+            <div class="shop-tabs" role="tablist" aria-label="Arms Room categories">
+                <button class="shop-tab is-active" type="button" data-shop-tab="powerups">Power-Ups</button>
+                <button class="shop-tab" type="button" data-shop-tab="guns">Guns</button>
+                <button class="shop-tab" type="button" data-shop-tab="upgrades">Upgrades</button>
+            </div>
+            <div class="shop-items">
+                <div class="shop-item" data-category="powerups">
+                    <div><strong>Armor Plating</strong><span>+25 max HP for one round</span></div>
+                    <button class="shop-buy" type="button" data-buy="maxHealth">10</button>
+                </div>
+                <div class="shop-item" data-category="powerups">
+                    <div><strong>Rapid Trigger</strong><span>Faster fire rate for one round</span></div>
+                    <button class="shop-buy" type="button" data-buy="rapidFire">15</button>
+                </div>
+                <div class="shop-item" data-category="powerups">
+                    <div><strong>Overcharged Rounds</strong><span>+10 bullet damage for one round</span></div>
+                    <button class="shop-buy" type="button" data-buy="damage">20</button>
+                </div>
+                <div class="shop-item rarity-rare" data-category="guns">
+                    <div><strong>Pulse Rifle</strong><span>Rare - fast single-shot rifle</span></div>
+                    <button class="shop-buy" type="button" data-buy="rifle">25</button>
+                </div>
+                <div class="shop-item rarity-rare" data-category="guns">
+                    <div><strong>Burst SMG</strong><span>Rare - tight three-round burst</span></div>
+                    <button class="shop-buy" type="button" data-buy="burst">30</button>
+                </div>
+                <div class="shop-item rarity-epic" data-category="guns">
+                    <div><strong>Scatter Blaster</strong><span>Epic - three-shot spread</span></div>
+                    <button class="shop-buy" type="button" data-buy="spread">35</button>
+                </div>
+                <div class="shop-item rarity-epic" data-category="guns">
+                    <div><strong>Hand Cannon</strong><span>Epic - slow heavy shot</span></div>
+                    <button class="shop-buy" type="button" data-buy="cannon">45</button>
+                </div>
+                <div class="shop-item rarity-legendary" data-category="guns">
+                    <div><strong>Ion Beam</strong><span>Legendary - fast energy bolt</span></div>
+                    <button class="shop-buy" type="button" data-buy="beam">55</button>
+                </div>
+                <div class="shop-item rarity-legendary" data-category="guns">
+                    <div><strong>Banana Launcher</strong><span>Legendary - slow explosive slug</span></div>
+                    <button class="shop-buy" type="button" data-buy="launcher">65</button>
+                </div>
+                <div class="shop-item rarity-legendary" data-category="guns">
+                    <div><strong>Rail Piercer</strong><span>Legendary - high-speed armor breaker</span></div>
+                    <button class="shop-buy" type="button" data-buy="rail">80</button>
+                </div>
+                <div class="shop-item" data-category="upgrades">
+                    <div><strong>Reinforced Suit</strong><span>Permanent +10 starting HP</span></div>
+                    <button class="shop-buy" type="button" data-buy="permHealth">40</button>
+                </div>
+                <div class="shop-item" data-category="upgrades">
+                    <div><strong>Weapon Tuning</strong><span>Permanent +4 bullet damage</span></div>
+                    <button class="shop-buy" type="button" data-buy="permDamage">50</button>
+                </div>
+                <div class="shop-item" data-category="upgrades">
+                    <div><strong>Trigger Kit</strong><span>Permanent faster fire rate</span></div>
+                    <button class="shop-buy" type="button" data-buy="permFireRate">60</button>
+                </div>
+            </div>
+        </aside>
+        <script src="./phaser.js"></script>
+        <script type="module" src="./src/main.js"></script>
+    </body>
+    </html>
