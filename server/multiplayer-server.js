@@ -166,33 +166,104 @@ class Room {
 
     createEnemy(type, x, y) {
         const id = crypto.randomUUID();
-        const isBrute = type === 'brute';
-        const isMinion = type === 'boss-minion';
-        const maxHealth = type === 'boss'
-            ? BOSS_HP
-            : isMinion
-                ? 2
-                : isBrute
-                    ? 4 + Math.floor(this.wave * 1.8)
-                    : 1 + Math.floor(this.wave * 0.8);
-        const wavePower = Math.max(1, this.wave);
+        const stats = this.getEnemyStats(type);
         this.enemies.set(id, {
             id,
             type,
             x,
             y,
             rotation: 0,
-            health: maxHealth,
-            maxHealth,
-            speed: type === 'boss' ? 72 : isMinion ? ENEMY_BASE_SPEED + 48 : (isBrute ? ENEMY_BASE_SPEED * 0.72 : ENEMY_BASE_SPEED) + this.wave * 8,
-            damage: type === 'boss' ? 28 : isMinion ? 9 : isBrute ? 18 + Math.floor(this.wave * 2.4) : 9 + Math.floor(this.wave * 1.6),
-            bulletDamage: type === 'boss' ? 18 : isMinion ? 5 : isBrute ? 8 + Math.floor(wavePower * 2.2) : 3 + Math.floor(wavePower * 1.4),
-            fireCooldown: type === 'boss' ? 1250 : isMinion ? 1050 : isBrute ? Math.max(950, 2300 - this.wave * 110) : Math.max(780, 1900 - this.wave * 95),
+            health: stats.health,
+            maxHealth: stats.health,
+            speed: stats.speed,
+            damage: stats.damage,
+            bulletDamage: stats.bulletDamage,
+            fireCooldown: stats.fireCooldown,
             nextShotAt: Date.now() + randomInt(800, 2400),
-            weapon: type === 'boss' ? 'banana-barrage' : isMinion ? 'stinger' : isBrute ? 'cannon' : 'blaster',
-            shootRange: type === 'boss' ? 980 : isMinion ? 560 : isBrute ? 780 : 620,
-            phase: 0
+            weapon: stats.weapon,
+            shootRange: stats.shootRange,
+            phase: 0,
+            nextHealAt: Date.now() + randomInt(900, 1700)
         });
+    }
+
+    getEnemyStats(type) {
+        const wavePower = Math.max(1, this.wave);
+        const stats = {
+            boss: {
+                health: BOSS_HP,
+                speed: 72,
+                damage: 28,
+                bulletDamage: 18,
+                fireCooldown: 1250,
+                weapon: 'banana-barrage',
+                shootRange: 980
+            },
+            'boss-minion': {
+                health: 2,
+                speed: ENEMY_BASE_SPEED + 48,
+                damage: 9,
+                bulletDamage: 5,
+                fireCooldown: 1050,
+                weapon: 'stinger',
+                shootRange: 560
+            },
+            grunt: {
+                health: 1 + Math.floor(this.wave * 0.8),
+                speed: ENEMY_BASE_SPEED + this.wave * 8,
+                damage: 9 + Math.floor(this.wave * 1.6),
+                bulletDamage: 3 + Math.floor(wavePower * 1.4),
+                fireCooldown: Math.max(780, 1900 - this.wave * 95),
+                weapon: 'blaster',
+                shootRange: 620
+            },
+            brute: {
+                health: 4 + Math.floor(this.wave * 1.8),
+                speed: ENEMY_BASE_SPEED * 0.72 + this.wave * 8,
+                damage: 18 + Math.floor(this.wave * 2.4),
+                bulletDamage: 8 + Math.floor(wavePower * 2.2),
+                fireCooldown: Math.max(950, 2300 - this.wave * 110),
+                weapon: 'cannon',
+                shootRange: 780
+            },
+            shield: {
+                health: 8 + Math.floor(this.wave * 2.4),
+                speed: ENEMY_BASE_SPEED * 0.58 + this.wave * 6,
+                damage: 14 + Math.floor(this.wave * 1.8),
+                bulletDamage: 5 + Math.floor(wavePower * 1.5),
+                fireCooldown: Math.max(950, 2100 - this.wave * 90),
+                weapon: 'shield-blaster',
+                shootRange: 560
+            },
+            sniper: {
+                health: 2 + Math.floor(this.wave * 0.7),
+                speed: ENEMY_BASE_SPEED * 0.86 + this.wave * 5,
+                damage: 8 + Math.floor(this.wave * 1.1),
+                bulletDamage: 14 + Math.floor(wavePower * 2.8),
+                fireCooldown: Math.max(1200, 2600 - this.wave * 90),
+                weapon: 'sniper',
+                shootRange: 1020
+            },
+            exploder: {
+                health: 3 + Math.floor(this.wave * 1.1),
+                speed: ENEMY_BASE_SPEED * 1.28 + this.wave * 10,
+                damage: 32 + Math.floor(this.wave * 3.2),
+                bulletDamage: 0,
+                fireCooldown: 999999,
+                weapon: 'exploder',
+                shootRange: 0
+            },
+            medic: {
+                health: 4 + Math.floor(this.wave * 1.2),
+                speed: ENEMY_BASE_SPEED * 0.9 + this.wave * 6,
+                damage: 7 + Math.floor(this.wave * 1.2),
+                bulletDamage: 3 + Math.floor(wavePower * 1.1),
+                fireCooldown: Math.max(900, 2100 - this.wave * 80),
+                weapon: 'medic',
+                shootRange: 600
+            }
+        };
+        return stats[type] || stats.grunt;
     }
 
     spawnWave() {
@@ -201,8 +272,17 @@ class Room {
         const bruteEvery = Math.max(2, 5 - Math.floor(this.wave / 2));
         for (let i = 0; i < ENEMIES_PER_WAVE; i += 1) {
             const spawn = this.getSpawnPoint();
-            this.createEnemy(i > 0 && i % bruteEvery === 0 ? 'brute' : 'grunt', spawn.x, spawn.y);
+            this.createEnemy(this.getWaveEnemyType(i, bruteEvery), spawn.x, spawn.y);
         }
+    }
+
+    getWaveEnemyType(index, bruteEvery) {
+        if (this.wave >= 5 && index === 4) return 'exploder';
+        if (this.wave >= 4 && index === 3) return 'medic';
+        if (this.wave >= 3 && index === 2) return 'sniper';
+        if (this.wave >= 2 && index === 1) return 'shield';
+        if (index > 0 && index % bruteEvery === 0) return 'brute';
+        return 'grunt';
     }
 
     spawnBossEncounter(now) {
@@ -287,6 +367,7 @@ class Room {
     }
 
     tryEnemyShot(enemy, target, now) {
+        if (enemy.weapon === 'exploder') return;
         if (now < enemy.nextShotAt || this.distance(enemy, target) > enemy.shootRange) return;
         enemy.nextShotAt = now + enemy.fireCooldown + randomInt(-120, 180);
         if (enemy.weapon === 'banana-storm') {
@@ -301,6 +382,13 @@ class Room {
             this.fireEnemyBullet(enemy, target, 'bruteBullet', 0, ENEMY_BULLET_SPEED * 0.78, enemy.bulletDamage);
         } else if (enemy.weapon === 'stinger') {
             this.fireEnemyBullet(enemy, target, 'minionBullet', 0, ENEMY_BULLET_SPEED * 1.2, enemy.bulletDamage);
+        } else if (enemy.weapon === 'sniper') {
+            this.fireEnemyBullet(enemy, target, 'bruteBullet', 0, ENEMY_BULLET_SPEED * 1.55, enemy.bulletDamage);
+        } else if (enemy.weapon === 'shield-blaster') {
+            this.fireEnemyBullet(enemy, target, 'enemyBullet', -0.08, ENEMY_BULLET_SPEED * 0.86, enemy.bulletDamage);
+            this.fireEnemyBullet(enemy, target, 'enemyBullet', 0.08, ENEMY_BULLET_SPEED * 0.86, enemy.bulletDamage);
+        } else if (enemy.weapon === 'medic') {
+            this.fireEnemyBullet(enemy, target, 'minionBullet', 0, ENEMY_BULLET_SPEED * 0.92, enemy.bulletDamage);
         } else {
             this.fireEnemyBullet(enemy, target, 'enemyBullet', 0, ENEMY_BULLET_SPEED, enemy.bulletDamage);
         }
@@ -374,6 +462,26 @@ class Room {
         }
     }
 
+    updateEnemySupport(enemy, now) {
+        if (enemy.type !== 'medic' || now < enemy.nextHealAt) return;
+        enemy.nextHealAt = now + 2200;
+        this.enemies.forEach((ally) => {
+            if (ally.id === enemy.id || ally.type === 'boss') return;
+            if (this.distance(enemy, ally) > 185) return;
+            ally.health = Math.min(ally.maxHealth, ally.health + 2);
+        });
+    }
+
+    explodeEnemy(enemy, now) {
+        this.players.forEach((player) => {
+            if (player.downed || player.health <= 0) return;
+            if (this.distance(enemy, player) <= 150) this.damagePlayer(player, enemy.damage);
+        });
+        this.dropCoins(enemy.x, enemy.y, 2, 'epic');
+        this.enemies.delete(enemy.id);
+        this.nextWaveAt = now + 900;
+    }
+
     updateEnemies(delta, now) {
         if (this.enemies.size === 0 && now > this.nextWaveAt) {
             if (this.wave >= BOSS_AFTER_WAVE && !this.bossDefeated) {
@@ -390,13 +498,20 @@ class Room {
 
         this.enemies.forEach((enemy) => {
             this.updateBossPhase(enemy);
+            this.updateEnemySupport(enemy, now);
             const target = this.nearestAlivePlayer(enemy);
             if (!target) return;
             const angle = Math.atan2(target.y - enemy.y, target.x - enemy.x);
+            const distance = this.distance(enemy, target);
+            if (enemy.type === 'exploder' && distance < 78) {
+                this.explodeEnemy(enemy, now);
+                return;
+            }
+            const direction = enemy.type === 'sniper' && distance < 430 ? angle + Math.PI : angle;
             enemy.rotation = angle;
-            enemy.x = clamp(enemy.x + Math.cos(angle) * enemy.speed * delta, 40, ARENA_WIDTH - 40);
-            enemy.y = clamp(enemy.y + Math.sin(angle) * enemy.speed * delta, 40, ARENA_HEIGHT - 40);
-            if (this.distance(enemy, target) < (enemy.type === 'boss' ? 92 : 52)) {
+            enemy.x = clamp(enemy.x + Math.cos(direction) * enemy.speed * delta, 40, ARENA_WIDTH - 40);
+            enemy.y = clamp(enemy.y + Math.sin(direction) * enemy.speed * delta, 40, ARENA_HEIGHT - 40);
+            if (distance < (enemy.type === 'boss' ? 92 : 52)) {
                 this.damagePlayer(target, enemy.damage);
             }
             this.tryEnemyShot(enemy, target, now);
@@ -414,19 +529,20 @@ class Room {
 
             if (bullet.source === 'player') {
                 for (const enemy of this.enemies.values()) {
-                    const radius = enemy.type === 'boss' ? 150 : enemy.type === 'brute' ? 56 : 42;
+                    const radius = enemy.type === 'boss' ? 150 : ['brute', 'shield'].includes(enemy.type) ? 56 : 42;
                     if (Math.hypot(enemy.x - bullet.x, enemy.y - bullet.y) > radius) continue;
-                    enemy.health -= bullet.damage;
+                    const damage = bullet.damage * (enemy.type === 'shield' ? 0.48 : 1);
+                    enemy.health -= damage;
                     const owner = this.players.get(bullet.ownerId);
-                    if (owner) owner.damageDone += bullet.damage;
+                    if (owner) owner.damageDone += damage;
                     this.bullets.delete(id);
                     if (enemy.health <= 0) {
                         const isBoss = enemy.type === 'boss';
                         if (owner) {
-                            owner.score += isBoss ? 2000 : enemy.type === 'brute' ? 220 : 95;
+                            owner.score += isBoss ? 2000 : this.getEnemyScoreValue(enemy.type);
                             owner.kills += 1;
                         }
-                        this.dropCoins(enemy.x, enemy.y, isBoss ? 15 : enemy.type === 'brute' ? 4 : 2, isBoss ? 'legendary' : enemy.type === 'brute' ? 'rare' : 'common');
+                        this.dropCoins(enemy.x, enemy.y, isBoss ? 15 : this.getEnemyCoinValue(enemy.type), isBoss ? 'legendary' : this.getEnemyCoinRarity(enemy.type));
                         if (isBoss) {
                             this.bossActive = false;
                             this.bossDefeated = true;
@@ -445,6 +561,38 @@ class Room {
                 }
             }
         });
+    }
+
+    getEnemyScoreValue(type) {
+        return {
+            brute: 220,
+            shield: 260,
+            sniper: 240,
+            exploder: 180,
+            medic: 260,
+            'boss-minion': 120
+        }[type] || 95;
+    }
+
+    getEnemyCoinValue(type) {
+        return {
+            brute: 4,
+            shield: 4,
+            sniper: 3,
+            exploder: 3,
+            medic: 4,
+            'boss-minion': 2
+        }[type] || 2;
+    }
+
+    getEnemyCoinRarity(type) {
+        return {
+            brute: 'rare',
+            shield: 'rare',
+            sniper: 'rare',
+            exploder: 'epic',
+            medic: 'rare'
+        }[type] || 'common';
     }
 
     updateCoins() {

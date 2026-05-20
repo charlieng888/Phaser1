@@ -75,6 +75,27 @@
                 display: none;
             }
 
+            #pause-button {
+                position: fixed;
+                right: 22px;
+                top: 22px;
+                z-index: 8;
+                min-height: 42px;
+                min-width: 104px;
+                padding: 0 14px;
+                border: 1px solid rgba(255, 210, 90, 0.6);
+                background: rgba(7, 9, 20, 0.68);
+                color: #fff0ca;
+                cursor: pointer;
+                font: 900 13px/1 Arial, sans-serif;
+            }
+
+            #pause-button[hidden],
+            body.menu-open #pause-button,
+            body.shop-open #pause-button {
+                display: none;
+            }
+
             .touch-pad {
                 position: absolute;
                 bottom: 34px;
@@ -676,6 +697,7 @@
             <button id="touch-home-button" type="button">HOME</button>
         </div>
         <button id="controls-toggle" type="button" hidden>CONTROLS</button>
+        <button id="pause-button" type="button" hidden>PAUSE</button>
         <div id="menu-overlay">
             <section class="menu-card" aria-label="Startup menu">
                 <h1>Polyblast Arena</h1>

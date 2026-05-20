@@ -92,6 +92,16 @@ export class Start extends Phaser.Scene {
             return;
         }
 
+        if (Phaser.Input.Keyboard.JustDown(this.cursors.pause)) {
+            this.togglePause();
+        }
+
+        if (this.isPaused) {
+            this.player.setVelocity(0);
+            this.updateHud();
+            return;
+        }
+
         this.updatePlayer(delta);
         this.updateAim();
         if (this.multiplayerMode) {
@@ -405,6 +415,15 @@ export class Start extends Phaser.Scene {
         this.helpText = this.add.text(640, 664, 'WASD or left pad to move | Mouse/right pad to aim | Hold click/FIRE', this.hudStyle(18, '#d7defd'))
             .setOrigin(0.5);
 
+        this.healthBar = this.add.container(1132, 654).setScrollFactor(0).setDepth(22);
+        this.healthBarBack = this.add.rectangle(0, 0, 236, 34, 0x070914, 0.86)
+            .setStrokeStyle(2, 0xffffff, 0.18);
+        this.healthBarFill = this.add.rectangle(-112, 0, 224, 20, 0x57ff78, 0.96)
+            .setOrigin(0, 0.5);
+        this.healthBarText = this.add.text(0, 0, 'HP 100/100', this.hudStyle(15, '#ffffff'))
+            .setOrigin(0.5);
+        this.healthBar.add([this.healthBarBack, this.healthBarFill, this.healthBarText]);
+
         this.bossHud = this.add.container(640, 38).setScrollFactor(0).setDepth(21).setVisible(false);
         this.bossHud.add([
             this.add.rectangle(0, 0, 520, 18, 0x070914, 0.82).setStrokeStyle(2, 0xffd25a, 0.7),
@@ -412,6 +431,14 @@ export class Start extends Phaser.Scene {
             this.add.text(0, -26, 'BOSS: BANANA WARLORD', this.hudStyle(16, '#fff0ca')).setOrigin(0.5)
         ]);
         this.bossHealthFill = this.bossHud.getAt(1);
+
+        this.pausePanel = this.add.container(640, 360).setScrollFactor(0).setDepth(39).setVisible(false);
+        this.pausePanel.add([
+            this.add.rectangle(0, 0, 360, 132, 0x070914, 0.78)
+                .setStrokeStyle(2, 0xffd25a, 0.54),
+            this.add.text(0, -18, 'PAUSED', this.hudStyle(42, '#fff0ca')).setOrigin(0.5),
+            this.add.text(0, 34, 'Press UNPAUSE to keep fighting.', this.hudStyle(15, '#d7defd')).setOrigin(0.5)
+        ]);
 
         this.crosshair = this.add.circle(0, 0, 11, 0x7cf7ff, 0.08)
             .setStrokeStyle(2, 0x7cf7ff, 0.95)
@@ -427,7 +454,7 @@ export class Start extends Phaser.Scene {
         const note = this.add.text(0, 108, 'Survive waves, grab shards, and keep moving.', this.hudStyle(17, '#e9fff0')).setOrigin(0.5);
         this.startPanel.add([panel, title, subtitle, start, note]);
 
-        this.hud.add([this.healthText, this.scoreText, this.waveText, this.profileText, this.scoreboardText, this.helpText, this.bossHud]);
+        this.hud.add([this.healthText, this.scoreText, this.waveText, this.profileText, this.scoreboardText, this.helpText, this.healthBar, this.bossHud, this.pausePanel]);
     }
 
     hudStyle(size, color) {
@@ -454,6 +481,7 @@ export class Start extends Phaser.Scene {
             down: Phaser.Input.Keyboard.KeyCodes.S,
             left: Phaser.Input.Keyboard.KeyCodes.A,
             right: Phaser.Input.Keyboard.KeyCodes.D,
+            pause: Phaser.Input.Keyboard.KeyCodes.P,
             restart: Phaser.Input.Keyboard.KeyCodes.R
         }, false);
 
@@ -477,6 +505,7 @@ export class Start extends Phaser.Scene {
         this.touchFireButton = document.getElementById('touch-fire-button');
         this.touchHealButton = document.getElementById('touch-heal-button');
         this.touchHomeButton = document.getElementById('touch-home-button');
+        this.pauseButton = document.getElementById('pause-button');
 
         this.bindTouchPad(this.movePad, this.moveStick, (vector, active) => {
             this.touchMove.copy(vector);
@@ -518,7 +547,9 @@ export class Start extends Phaser.Scene {
             event.preventDefault();
             this.returnHome();
         });
+        this.pauseButton?.addEventListener('click', () => this.togglePause());
         this.updateTouchHealButton();
+        this.updatePauseButton();
     }
 
     bindTouchPad(pad, stick, onMove) {
@@ -978,6 +1009,8 @@ export class Start extends Phaser.Scene {
         this.hud.setVisible(false);
         this.armsButton.hidden = true;
         if (this.controlsToggle) this.controlsToggle.hidden = true;
+        if (this.pauseButton) this.pauseButton.hidden = true;
+        this.setPaused(false);
         this.startPanel.setVisible(false);
         this.updateShop();
     }
@@ -988,6 +1021,7 @@ export class Start extends Phaser.Scene {
         this.touchFireHeld = false;
         this.touchAiming = false;
         this.touchMove?.set(0, 0);
+        this.setPaused(false);
         this.disconnectMultiplayer();
         this.player.setVelocity(0);
         this.player.setActive(true).setVisible(true).setAlpha(1);
@@ -999,6 +1033,7 @@ export class Start extends Phaser.Scene {
         this.pickups.clear(true, true);
         this.coins.clear(true, true);
         this.bossHud.setVisible(false);
+        this.pausePanel?.setVisible(false);
         this.startPanel.setVisible(false);
         this.showStartupMenu();
     }
@@ -1028,6 +1063,8 @@ export class Start extends Phaser.Scene {
         this.hud.setVisible(true);
         this.armsButton.hidden = false;
         if (this.controlsToggle) this.controlsToggle.hidden = false;
+        if (this.pauseButton) this.pauseButton.hidden = false;
+        this.updatePauseButton();
     }
 
     beginRun(multiplayer = false) {
@@ -1035,13 +1072,41 @@ export class Start extends Phaser.Scene {
         this.hideStartupMenu();
         this.closeShop();
         this.resetRun(false);
+        this.setPaused(false);
         this.started = true;
         this.startPanel.setVisible(false);
+        this.updatePauseButton();
         if (multiplayer) {
             this.connectMultiplayer();
         } else {
             this.disconnectMultiplayer();
         }
+    }
+
+    togglePause() {
+        if (!this.started || this.gameOver || this.menuVisible) return;
+        this.setPaused(!this.isPaused);
+    }
+
+    setPaused(value) {
+        this.isPaused = Boolean(value);
+        if (this.isPaused) {
+            this.touchFireHeld = false;
+            this.touchAiming = false;
+            this.touchMove?.set(0, 0);
+            this.player?.setVelocity(0);
+            this.physics?.world?.pause();
+        } else {
+            this.physics?.world?.resume();
+        }
+        this.pausePanel?.setVisible(this.isPaused);
+        this.updatePauseButton();
+    }
+
+    updatePauseButton() {
+        if (!this.pauseButton) return;
+        this.pauseButton.textContent = this.isPaused ? 'UNPAUSE' : 'PAUSE';
+        this.pauseButton.hidden = !this.started || this.gameOver || this.menuVisible;
     }
 
     connectMultiplayer() {
@@ -1176,15 +1241,17 @@ export class Start extends Phaser.Scene {
 
     createServerEnemy(enemy) {
         const isBoss = enemy.type === 'boss';
+        const visual = this.getEnemyVisualConfig(enemy.type);
         const texture = isBoss ? 'bananaBoss' : 'characters';
-        const frame = isBoss ? 0 : enemy.type === 'brute' ? 8 : 4;
+        const frame = isBoss ? 0 : visual.frame;
         const sprite = this.add.sprite(enemy.x, enemy.y, texture, frame)
-            .setScale(isBoss ? 0.42 : enemy.type === 'brute' ? 0.23 : 0.18)
+            .setScale(isBoss ? 0.42 : visual.scale)
             .setDepth(8);
         if (isBoss) {
             sprite.play('banana-boss-walk');
         } else {
-            sprite.play(enemy.type === 'brute' ? 'brute-run' : 'grunt-run');
+            sprite.play(visual.animation);
+            if (visual.tint) sprite.setTint(visual.tint);
         }
         sprite.setData('type', enemy.type);
         sprite.setData('health', enemy.health);
@@ -1192,9 +1259,9 @@ export class Start extends Phaser.Scene {
         this.attachNameplate(
             sprite,
             this.getEnemyLabel(sprite),
-            isBoss ? 140 : enemy.type === 'brute' ? 70 : 58,
-            isBoss ? 0xffd25a : enemy.type === 'brute' ? 0xffa84e : 0xff6161,
-            isBoss ? -110 : -42
+            isBoss ? 140 : visual.plateWidth,
+            isBoss ? 0xffd25a : visual.color,
+            isBoss ? -110 : visual.offsetY
         );
         return { sprite };
     }
@@ -1481,6 +1548,7 @@ export class Start extends Phaser.Scene {
     resetRun(showPanel = false) {
         this.started = false;
         this.gameOver = false;
+        this.setPaused(false);
         this.resetRoundStats();
         this.health = this.playerStats.maxHealth;
         this.score = 0;
@@ -1603,9 +1671,16 @@ export class Start extends Phaser.Scene {
 
         this.enemies.children.iterate((enemy) => {
             if (!enemy || !enemy.active) return;
+            this.updateEnemySupport(enemy, time);
             const angle = Phaser.Math.Angle.Between(enemy.x, enemy.y, this.player.x, this.player.y);
+            const distance = Phaser.Math.Distance.Between(enemy.x, enemy.y, this.player.x, this.player.y);
+            if (enemy.getData('type') === 'exploder' && distance < 78) {
+                this.explodeEnemy(enemy);
+                return;
+            }
             const speed = enemy.getData('speed');
-            enemy.setVelocity(Math.cos(angle) * speed, Math.sin(angle) * speed);
+            const direction = enemy.getData('type') === 'sniper' && distance < 430 ? angle + Math.PI : angle;
+            enemy.setVelocity(Math.cos(direction) * speed, Math.sin(direction) * speed);
             enemy.rotation = angle;
             this.tryEnemyShot(enemy, time);
             this.updateNameplate(
@@ -1615,6 +1690,22 @@ export class Start extends Phaser.Scene {
                 this.getEnemyLabel(enemy)
             );
         });
+    }
+
+    updateEnemySupport(enemy, time) {
+        if (enemy.getData('type') !== 'medic' || time < enemy.getData('nextHealAt')) return;
+        enemy.setData('nextHealAt', time + 2200);
+        let healed = false;
+        this.enemies.children.iterate((ally) => {
+            if (!ally || !ally.active || ally === enemy || ally.getData('type') === 'boss') return;
+            if (Phaser.Math.Distance.Between(enemy.x, enemy.y, ally.x, ally.y) > 185) return;
+            const maxHealth = ally.getData('maxHealth') || 1;
+            const health = ally.getData('health') || 0;
+            if (health >= maxHealth) return;
+            ally.setData('health', Math.min(maxHealth, health + 2));
+            healed = true;
+        });
+        if (healed) this.spawnSpark(enemy.x, enemy.y, 0x74ffb3);
     }
 
     updatePickups() {
@@ -1696,28 +1787,113 @@ export class Start extends Phaser.Scene {
         const wavePower = this.getWavePower();
 
         for (let i = 0; i < total; i += 1) {
-            const isBrute = i > 0 && i % bruteEvery === 0;
+            const type = this.getWaveEnemyType(i, bruteEvery);
+            const visual = this.getEnemyVisualConfig(type);
             const spawn = this.getSpawnPoint();
-            const enemy = this.enemies.create(spawn.x, spawn.y, 'characters', isBrute ? 8 : 4);
-            enemy.setScale(isBrute ? 0.23 : 0.18);
-            enemy.play(isBrute ? 'brute-run' : 'grunt-run');
-            this.setCharacterBody(enemy, isBrute ? 133 : 118);
-            enemy.setData('type', isBrute ? 'brute' : 'grunt');
-            const health = isBrute
-                ? 4 + Math.floor(this.wave * 1.8)
-                : 1 + Math.floor(this.wave * 0.8);
+            const enemy = this.enemies.create(spawn.x, spawn.y, 'characters', visual.frame);
+            enemy.setScale(visual.scale);
+            enemy.play(visual.animation);
+            if (visual.tint) enemy.setTint(visual.tint);
+            this.setCharacterBody(enemy, visual.bodyRadius);
+            enemy.setData('type', type);
+            enemy.setData('baseTint', visual.tint);
+            const stats = this.getEnemyStats(type, wavePower);
+            const health = stats.health;
             enemy.setData('health', health);
             enemy.setData('maxHealth', health);
-            enemy.setData('speed', (isBrute ? ENEMY_BASE_SPEED * 0.72 : ENEMY_BASE_SPEED) + this.wave * 8);
-            enemy.setData('damage', isBrute ? 18 + Math.floor(this.wave * 2.4) : 9 + Math.floor(this.wave * 1.6));
-            enemy.setData('bulletDamage', isBrute ? 8 + Math.floor(wavePower * 2.2) : 3 + Math.floor(wavePower * 1.4));
-            enemy.setData('fireCooldown', isBrute ? Math.max(950, 2300 - this.wave * 110) : Math.max(780, 1900 - this.wave * 95));
+            enemy.setData('speed', stats.speed);
+            enemy.setData('damage', stats.damage);
+            enemy.setData('bulletDamage', stats.bulletDamage);
+            enemy.setData('fireCooldown', stats.fireCooldown);
             enemy.setData('nextShotAt', this.time.now + Phaser.Math.Between(1400, 2800));
-            enemy.setData('weapon', isBrute ? 'cannon' : 'blaster');
-            enemy.setData('shootRange', isBrute ? 780 : 620);
+            enemy.setData('weapon', stats.weapon);
+            enemy.setData('shootRange', stats.shootRange);
+            enemy.setData('nextHealAt', this.time.now + Phaser.Math.Between(900, 1700));
             enemy.setCollideWorldBounds(true);
-            this.attachNameplate(enemy, isBrute ? 'Brute' : 'Grunt', isBrute ? 70 : 58, isBrute ? 0xffa84e : 0xff6161);
+            this.attachNameplate(enemy, this.getEnemyLabel(enemy), visual.plateWidth, visual.color, visual.offsetY);
         }
+    }
+
+    getWaveEnemyType(index, bruteEvery) {
+        if (this.wave >= 5 && index === 4) return 'exploder';
+        if (this.wave >= 4 && index === 3) return 'medic';
+        if (this.wave >= 3 && index === 2) return 'sniper';
+        if (this.wave >= 2 && index === 1) return 'shield';
+        if (index > 0 && index % bruteEvery === 0) return 'brute';
+        return 'grunt';
+    }
+
+    getEnemyVisualConfig(type) {
+        const configs = {
+            grunt: { frame: 4, scale: 0.18, bodyRadius: 118, animation: 'grunt-run', color: 0xff6161, plateWidth: 58, offsetY: -42, tint: null },
+            brute: { frame: 8, scale: 0.23, bodyRadius: 133, animation: 'brute-run', color: 0xffa84e, plateWidth: 70, offsetY: -42, tint: null },
+            shield: { frame: 8, scale: 0.24, bodyRadius: 136, animation: 'brute-run', color: 0x72a7ff, plateWidth: 72, offsetY: -44, tint: 0x72a7ff },
+            sniper: { frame: 4, scale: 0.16, bodyRadius: 108, animation: 'grunt-run', color: 0xff8de3, plateWidth: 68, offsetY: -40, tint: 0xff8de3 },
+            exploder: { frame: 4, scale: 0.19, bodyRadius: 124, animation: 'grunt-run', color: 0xffd25a, plateWidth: 78, offsetY: -42, tint: 0xffd25a },
+            medic: { frame: 4, scale: 0.18, bodyRadius: 118, animation: 'grunt-run', color: 0x74ffb3, plateWidth: 64, offsetY: -42, tint: 0x74ffb3 },
+            'boss-minion': { frame: 4, scale: 0.15, bodyRadius: 112, animation: 'grunt-run', color: 0xffd25a, plateWidth: 54, offsetY: -38, tint: null }
+        };
+        return configs[type] || configs.grunt;
+    }
+
+    getEnemyStats(type, wavePower) {
+        const base = {
+            grunt: {
+                health: 1 + Math.floor(this.wave * 0.8),
+                speed: ENEMY_BASE_SPEED + this.wave * 8,
+                damage: 9 + Math.floor(this.wave * 1.6),
+                bulletDamage: 3 + Math.floor(wavePower * 1.4),
+                fireCooldown: Math.max(780, 1900 - this.wave * 95),
+                weapon: 'blaster',
+                shootRange: 620
+            },
+            brute: {
+                health: 4 + Math.floor(this.wave * 1.8),
+                speed: ENEMY_BASE_SPEED * 0.72 + this.wave * 8,
+                damage: 18 + Math.floor(this.wave * 2.4),
+                bulletDamage: 8 + Math.floor(wavePower * 2.2),
+                fireCooldown: Math.max(950, 2300 - this.wave * 110),
+                weapon: 'cannon',
+                shootRange: 780
+            },
+            shield: {
+                health: 8 + Math.floor(this.wave * 2.4),
+                speed: ENEMY_BASE_SPEED * 0.58 + this.wave * 6,
+                damage: 14 + Math.floor(this.wave * 1.8),
+                bulletDamage: 5 + Math.floor(wavePower * 1.5),
+                fireCooldown: Math.max(950, 2100 - this.wave * 90),
+                weapon: 'shield-blaster',
+                shootRange: 560
+            },
+            sniper: {
+                health: 2 + Math.floor(this.wave * 0.7),
+                speed: ENEMY_BASE_SPEED * 0.86 + this.wave * 5,
+                damage: 8 + Math.floor(this.wave * 1.1),
+                bulletDamage: 14 + Math.floor(wavePower * 2.8),
+                fireCooldown: Math.max(1200, 2600 - this.wave * 90),
+                weapon: 'sniper',
+                shootRange: 1020
+            },
+            exploder: {
+                health: 3 + Math.floor(this.wave * 1.1),
+                speed: ENEMY_BASE_SPEED * 1.28 + this.wave * 10,
+                damage: 32 + Math.floor(this.wave * 3.2),
+                bulletDamage: 0,
+                fireCooldown: 999999,
+                weapon: 'exploder',
+                shootRange: 0
+            },
+            medic: {
+                health: 4 + Math.floor(this.wave * 1.2),
+                speed: ENEMY_BASE_SPEED * 0.9 + this.wave * 6,
+                damage: 7 + Math.floor(this.wave * 1.2),
+                bulletDamage: 3 + Math.floor(wavePower * 1.1),
+                fireCooldown: Math.max(900, 2100 - this.wave * 80),
+                weapon: 'medic',
+                shootRange: 600
+            }
+        };
+        return base[type] || base.grunt;
     }
 
     getWavePower() {
@@ -1787,11 +1963,16 @@ export class Start extends Phaser.Scene {
         if (type === 'boss') return 'Banana Warlord';
         if (type === 'boss-minion') return 'Minion';
         if (type === 'brute') return 'Brute';
+        if (type === 'shield') return 'Shield';
+        if (type === 'sniper') return 'Sniper';
+        if (type === 'exploder') return 'Exploder';
+        if (type === 'medic') return 'Medic';
         return 'Grunt';
     }
 
     tryEnemyShot(enemy, time) {
         if (time < enemy.getData('nextShotAt')) return;
+        if (enemy.getData('weapon') === 'exploder') return;
 
         const distance = Phaser.Math.Distance.Between(enemy.x, enemy.y, this.player.x, this.player.y);
         const range = enemy.getData('shootRange') || 560;
@@ -1809,6 +1990,13 @@ export class Start extends Phaser.Scene {
             this.fireEnemyBullet(enemy, 'bossBullet', 0.18, ENEMY_BULLET_SPEED * 0.76, enemy.getData('bulletDamage'));
         } else if (weapon === 'stinger') {
             this.fireEnemyBullet(enemy, 'minionBullet', 0, ENEMY_BULLET_SPEED * 1.2, enemy.getData('bulletDamage'));
+        } else if (weapon === 'sniper') {
+            this.fireEnemyBullet(enemy, 'bruteBullet', 0, ENEMY_BULLET_SPEED * 1.55, enemy.getData('bulletDamage'));
+        } else if (weapon === 'shield-blaster') {
+            this.fireEnemyBullet(enemy, 'enemyBullet', -0.08, ENEMY_BULLET_SPEED * 0.86, enemy.getData('bulletDamage'));
+            this.fireEnemyBullet(enemy, 'enemyBullet', 0.08, ENEMY_BULLET_SPEED * 0.86, enemy.getData('bulletDamage'));
+        } else if (weapon === 'medic') {
+            this.fireEnemyBullet(enemy, 'minionBullet', 0, ENEMY_BULLET_SPEED * 0.92, enemy.getData('bulletDamage'));
         } else {
             this.fireEnemyBullet(enemy, 'enemyBullet', 0, ENEMY_BULLET_SPEED, enemy.getData('bulletDamage'));
         }
@@ -1849,10 +2037,22 @@ export class Start extends Phaser.Scene {
     hitEnemy(bullet, enemy) {
         this.killBullet(bullet);
         const isBoss = enemy.getData('type') === 'boss';
-        const health = enemy.getData('health') - (bullet.getData('damage') || (isBoss ? 20 : 1));
+        const type = enemy.getData('type');
+        const damageMultiplier = type === 'shield' ? 0.48 : 1;
+        const damage = (bullet.getData('damage') || (isBoss ? 20 : 1)) * damageMultiplier;
+        const health = enemy.getData('health') - damage;
         enemy.setData('health', health);
         enemy.setTintFill(0xffffff);
-        this.time.delayedCall(55, () => enemy.active && (isBoss ? enemy.setTint(0xfff0ca) : enemy.clearTint()));
+        this.time.delayedCall(55, () => {
+            if (!enemy.active) return;
+            if (isBoss) {
+                enemy.setTint(0xfff0ca);
+            } else if (enemy.getData('baseTint')) {
+                enemy.setTint(enemy.getData('baseTint'));
+            } else {
+                enemy.clearTint();
+            }
+        });
         this.spawnSpark(enemy.x, enemy.y, 0xfff0ca);
         if (isBoss) {
             enemy.setTint(0xfff0ca);
@@ -1868,15 +2068,50 @@ export class Start extends Phaser.Scene {
                 this.bossHud.setVisible(false);
                 this.cameras.main.shake(420, 0.011);
             } else {
-                this.score += enemy.getData('type') === 'brute' ? 220 : 95;
+                this.score += this.getEnemyScoreValue(type);
             }
             if (Phaser.Math.Between(0, 100) < 22) {
                 this.spawnPickup(enemy.x, enemy.y);
             }
-            this.dropCoins(enemy.x, enemy.y, isBoss ? 15 : enemy.getData('type') === 'brute' ? 4 : 2);
+            this.dropCoins(enemy.x, enemy.y, isBoss ? 15 : this.getEnemyCoinValue(type));
             enemy.destroy();
             this.nextWaveAt = this.time.now + 900;
         }
+    }
+
+    getEnemyScoreValue(type) {
+        return {
+            brute: 220,
+            shield: 260,
+            sniper: 240,
+            exploder: 180,
+            medic: 260,
+            'boss-minion': 120
+        }[type] || 95;
+    }
+
+    getEnemyCoinValue(type) {
+        return {
+            brute: 4,
+            shield: 4,
+            sniper: 3,
+            exploder: 3,
+            medic: 4,
+            'boss-minion': 2
+        }[type] || 2;
+    }
+
+    explodeEnemy(enemy) {
+        if (!enemy.active) return;
+        const damage = enemy.getData('damage') || 32;
+        this.spawnSpark(enemy.x, enemy.y, 0xffd25a);
+        this.cameras.main.shake(150, 0.006);
+        if (Phaser.Math.Distance.Between(enemy.x, enemy.y, this.player.x, this.player.y) < 150) {
+            this.damagePlayer(damage, enemy.x, enemy.y);
+        }
+        this.dropCoins(enemy.x, enemy.y, 2);
+        enemy.destroy();
+        this.nextWaveAt = this.time.now + 900;
     }
 
     touchEnemy(player, enemy) {
@@ -1978,6 +2213,7 @@ export class Start extends Phaser.Scene {
     }
 
     endRun() {
+        this.setPaused(false);
         this.gameOver = true;
         this.started = false;
         this.player.setActive(false).setVisible(false);
@@ -2009,8 +2245,22 @@ export class Start extends Phaser.Scene {
         const me = this.lastScoreboard?.find?.((player) => player.id === multiplayerClient.id);
         const status = me?.downed ? `DOWN ${Math.round((me.reviveProgress || 0) * 100)}%` : this.profile.className;
         this.updateNameplate(this.player, Math.max(0, this.health), this.playerStats.maxHealth, `${this.profile.name} | ${status}`);
+        this.updateHealthBar();
         this.updateScoreboardText();
         this.updateBossHud();
+    }
+
+    updateHealthBar() {
+        if (!this.healthBarFill || !this.healthBarText) return;
+        const maxHealth = this.playerStats.maxHealth || 100;
+        const currentHealth = Phaser.Math.Clamp(Math.ceil(this.health), 0, maxHealth);
+        const ratio = currentHealth / maxHealth;
+        const fillColor = ratio <= 0.3 ? 0xff6161 : ratio <= 0.6 ? 0xffd25a : 0x57ff78;
+
+        this.healthBarFill.displayWidth = 224 * ratio;
+        this.healthBarFill.setFillStyle(fillColor, 0.96);
+        this.healthBarText.setText(`HP ${currentHealth}/${maxHealth}`);
+        this.healthBar.setVisible(this.started && !this.gameOver);
     }
 
     updateScoreboardText() {
